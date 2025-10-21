@@ -20,10 +20,10 @@
 
 | No. | Name                  | Student ID | Class | Email                              |
 | :-: | --------------------- | :--------: | :---: | ---------------------------------- |
-|  1  | Nguyễn Duy Thành      | 2353101    | CC05  | thanh.nguyen09012005@hcmut.edu.vn  |
-|  2  | Đặng Sinh Hùng        | 2352420    | CC05  | hung.dang2109@hcmut.edu.vn         |
-|  3  | Châu Kiến Toàn        | 2353192    | CC05  | toan.chaukien@hcmut.edu.vn         |
-|  4  | Phạm Quang Tiến Thành | 2353103    | CC05  | thanh.pham04052005@hcmut.edu.vn    |
+|  1  | Nguyễn Duy Thành      | 2353101    | CC06  | thanh.nguyen09012005@hcmut.edu.vn  |
+|  2  | Đặng Sinh Hùng        | 2352420    | CC06  | hung.dang2109@hcmut.edu.vn         |
+|  3  | Châu Kiến Toàn        | 2353192    | CC06  | toan.chaukien@hcmut.edu.vn         |
+|  4  | Phạm Quang Tiến Thành | 2353103    | CC06  | thanh.pham04052005@hcmut.edu.vn    |
 
 ---
 
