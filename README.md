@@ -6,7 +6,7 @@
 
 [![HCMUT Logo](https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HCMUT_official_logo.png/238px-HCMUT_official_logo.png)](https://www.hcmut.edu.vn/vi)
 
-**Computer Networks / Semester 231**  
+**Computer Networks / Semester 251**  
 **Group 1**
 
 </div>
