@@ -15,7 +15,7 @@
 
 # 🧠 Project Repository: Computer Networks Assignments
 
-## Lecturer: [Your Lecturer’s Name]
+## Lecturer: [Nguyễn Thành Nhân]
 ## Team Members
 
 | No. | Name                  | Student ID | Class | Email                              |
@@ -35,18 +35,22 @@ Each project explores different aspects of **TCP/IP-based communication**, **soc
 ---
 
 ## 📦 Repository Structure
+```markdown
+## 📦 Repository Structure
+```text
 Computer-Networks/
 ├── Assignment1_FileSharing/
-│ ├── client/
-│ ├── server/
-│ ├── report/
-│ ├── docs/
-│ └── README.md
+│   ├── client/
+│   ├── server/
+│   ├── report/
+│   ├── docs/
+│   └── README.md
 ├── Assignment2_[ProjectName]/
-│ ├── src/
-│ ├── report/
-│ └── README.md
-└── main_README.md ← (this file)
+│   ├── src/
+│   ├── report/
+│   └── README.md
+└── main_README.md   ← (this file)
+```
 
 ---
 
@@ -67,6 +71,7 @@ Develop a **simple file-sharing system** where:
 - Simple **CLI-based shell** for interaction  
 
 ### 🧱 Architecture
+```markdown
  ┌──────────────┐
      │    Server    │
      │ (File Index) │
@@ -80,43 +85,13 @@ Develop a **simple file-sharing system** where:
 ┌────────┐ ┌────────┐
 │Client A│ <──P2P──> │Client B│
 └────────┘ └────────┘
+```
 
 ### 🧾 Deliverables
 - Protocol design document  
 - Source code (client & server)  
 - System architecture diagrams  
 - Performance validation & test report  
-
----
-
-## 🧮 Assignment 2 – [Your Project Title]
-*(e.g., “Multi-threaded Web Server” / “Chat Application using TCP/UDP”)*
-
-### 🎯 Objective
-Build a **more advanced networked system** focusing on:
-- Reliability  
-- Concurrency  
-- Application-layer protocol implementation  
-
-### ⚙️ Features
-- [Feature 1 – short description]  
-- [Feature 2 – short description]  
-- [Feature 3 – short description]  
-
-### 🧱 Architecture
-
-### 🧾 Deliverables
-- Detailed design report  
-- Source code & documentation  
-- Performance and stress tests  
-- Role assignment & contribution summary  
-
----
-
-## 🧪 Testing & Validation
-- Tested in a **LAN** and **Internet** environment using **Python sockets (TCP)**.  
-- Supports multiple concurrent clients.  
-- Verified protocol correctness and packet flow via **Wireshark**.  
 
 ---
 
