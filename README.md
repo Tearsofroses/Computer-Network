@@ -43,6 +43,7 @@ Computer-Networks/
 │   ├── server.py
 │   ├── server_ui.py
 ├── Assignment_2/
+├── .gitignore
 └── README.md   ← (this file)
 ```
 
