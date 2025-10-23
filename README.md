@@ -39,61 +39,94 @@ Each project explores different aspects of **TCP/IP-based communication**, **soc
 ## 📦 Repository Structure
 ```text
 Computer-Networks/
-├── Assignment1_FileSharing/
-│   ├── client/
-│   ├── server/
-│   ├── report/
-│   ├── docs/
-│   └── README.md
-├── Assignment2_[ProjectName]/
-│   ├── src/
-│   ├── report/
-│   └── README.md
-└── main_README.md   ← (this file)
+├── Assignment_1/
+│   ├── client.py
+│   ├── client_ui.py
+│   ├── server.py
+│   ├── server_ui.py
+├── Assignment_2/
+└── README.md   ← (this file)
 ```
 
 ---
 
-## 🧩 Assignment 1 – File Sharing Network Application
+## Assignment 1 – File Sharing Network Application
 
-### 🎯 Objective
-Develop a **simple file-sharing system** where:
-- A **central server** tracks connected clients and the files they share.
-- Clients **publish** files to the server and **fetch** files from peers directly.
-- Transfers between clients are **peer-to-peer (P2P)** using the **TCP protocol**.
-- Multithreading supports multiple simultaneous downloads.
+A lightweight, GUI-driven peer-to-peer file sharing system built with Python, using a central server for coordination and direct peer-to-peer transfers for file exchange. No cloud. No middlemen. Just your network.
 
-### ⚙️ Features
-- Custom **application-layer protocol**  
-- **Server commands**: `discover`, `ping`  
-- **Client commands**: `publish`, `fetch`  
-- **Concurrent downloads** via threads  
-- Simple **CLI-based shell** for interaction  
+### Features
+Central Server tracks which peers have which files
+Clients publish local files under custom names
+Search & Download files from any online peer
+Tkinter GUI for both Server and Client (no command-line required)
+PostgreSQL backend for persistent file metadata
+Direct P2P transfer on port 65433 (bypasses server for actual data)
+Admin console in server: discover <host>, ping <host>
+Graceful shutdown support
 
-### 🧱 Architecture
+### Architecture
 ```markdown
-     ┌──────────────┐
-     │    Server    │
-     │ (File Index) │
-     └──────┬───────┘
-            │
-    ┌───────┴────────┐
-    │     Internet   │
-    └───────┬────────┘
-┌───────────┴───────────┐
-│                       │
-┌────────┐ ┌────────┐┌────────┐
-│Client A│ <──P2P──> │Client B│
-└────────┘ └────────┘└────────┘
+[Client A] ←→ [Central Server] ←→ [Client B]
+     ↓              ↑              ↓
+  (65433)        (65432)        (65433)
+     ↓              ↑              ↓
+[Local Files]   [PostgreSQL]   [Local Files]
 ```
+Server runs on 0.0.0.0:65432
+Clients run a local service on 0.0.0.0:65433
+File metadata stored in PostgreSQL
+File content transferred directly between peers
 
-### 🧾 Deliverables
+### Files Overview
 - Protocol design document  
 - Source code (client & server)  
 - System architecture diagrams  
 - Performance validation & test report  
 
 ---
+## Prerequisites
+
+Python 3.8+
+PostgreSQL server running locally
+psycopg2 Python package
+
+## Database Setup
+CREATE DATABASE filesharing;
+
+\c filesharing
+
+CREATE TABLE client_files (
+    id SERIAL PRIMARY KEY,
+    lname TEXT NOT NULL,        -- local path on peer
+    fname TEXT NOT NULL,        -- shared name
+    extension TEXT,             -- file extension (without dot)
+    hostname TEXT NOT NULL,
+    address INET NOT NULL,
+    UNIQUE(address, fname, hostname)
+);
+
+## How to run 
+1. Start the server
+python server_ui.py
+- Opens a GUI window
+- Shows connected clients
+- Logs all activity
+- Use Admin Commands to Discover Files or Ping a host
+
+2. Start Clients (on same network)
+python client_ui.py
+- Publish a file:
+  Click Browse → select a file
+  Enter a Shared Name (e.g., myphoto)
+  Click Publish
+- Download a file:
+  Enter the Shared Name → click Search
+  Select a peer from the list
+  Click Download Selected → choose save location
+
+## Network Configuration
+Change the server IP in client_ui.py to your machine running server IP:
+SERVER_IP = 'your.server.ip.here'
 
 ## 🧰 Languages & Tools
 
@@ -109,7 +142,3 @@ Develop a **simple file-sharing system** where:
 
 - **Documentation & Reporting**  
   <img src="https://images.ctfassets.net/nrgyaltdicpt/6gsvc5Ogjmu04I4Miu0uGg/cb1d4391717d2ab8d5e42ede6fb0eef1/overleaf_wide_colour_light_bg.png" width=70px/>
-
-- **Testing Tools**  
-  <img src="https://upload.wikimedia.org/wikipedia/commons/d/d5/Wireshark_icon.svg" width=40px/>  
-  Wireshark for packet inspection 
