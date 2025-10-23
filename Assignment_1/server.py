@@ -188,7 +188,7 @@ def ping_peer(hostname: str):
         response = ping_sock.recv(4096).decode('utf-8').strip()
         ping_sock.close()
 
-        if response == "Pekowide":
+        if response == "Hello there!":
             logging.info(f"{hostname} ({ip_addr}) is ONLINE")
         else:
             logging.warning(f"{hostname} responded but not recognized: {response}")
