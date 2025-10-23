@@ -13,7 +13,7 @@
 
 ---
 
-# 🧠 Project Repository: Computer Networks Assignments
+# Project Repository: Computer Networks Assignments
 
 ## Lecturer: [Nguyễn Thành Nhân]
 ## Team Members
@@ -27,7 +27,7 @@
 
 ---
 
-## 📚 Overview
+## Overview
 
 This repository contains two major assignments for the **Computer Networks** course at HCMUT.  
 Each project explores different aspects of **TCP/IP-based communication**, **socket programming**, and **network protocol design**.
@@ -36,8 +36,6 @@ Each project explores different aspects of **TCP/IP-based communication**, **soc
 
 ## 📦 Repository Structure
 ```markdown
-## 📦 Repository Structure
-```text
 Computer-Networks/
 ├── Assignment_1/
 │   ├── client.py
@@ -91,6 +89,7 @@ PostgreSQL server running locally
 psycopg2 Python package
 
 ## Database Setup
+```sql
 CREATE DATABASE filesharing;
 
 \c filesharing
@@ -104,17 +103,22 @@ CREATE TABLE client_files (
     address INET NOT NULL,
     UNIQUE(address, fname, hostname)
 );
+```
 
 ## How to run 
 1. Start the server
+```python
 python server_ui.py
+```
 - Opens a GUI window
 - Shows connected clients
 - Logs all activity
 - Use Admin Commands to Discover Files or Ping a host
 
 2. Start Clients (on same network)
+```python
 python client_ui.py
+```
 - Publish a file:
   Click Browse → select a file
   Enter a Shared Name (e.g., myphoto)
