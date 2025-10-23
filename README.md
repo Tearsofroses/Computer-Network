@@ -34,7 +34,7 @@ Each project explores different aspects of **TCP/IP-based communication**, **soc
 
 ---
 
-## 📦 Repository Structure
+## Repository Structure
 ```markdown
 Computer-Networks/
 ├── Assignment_1/
@@ -139,7 +139,7 @@ SERVER_IP = 'your.server.ip.here'
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width=40px/>
 
 - **Networking & Threading**  
-  <img src="https://cdn-icons-png.flaticon.com/512/919/919854.png" width=40px/>  
+  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width=40px/>
   Python `socket` & `threading` libraries
 
 - **Version Control**  
