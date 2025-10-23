@@ -12,7 +12,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Database connection (to be filled in)
+# Database connection
 try:
     db_conn = psycopg2.connect(
         dbname="filesharing",

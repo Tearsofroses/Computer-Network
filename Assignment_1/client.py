@@ -31,7 +31,7 @@ def handle_peer_connection(client_conn, shared_dir):
             client_conn.sendall(json.dumps(response).encode('utf-8') + b'\n')
 
         elif request['action'] == 'ping':
-            client_conn.sendall(b'Pekowide\n')
+            client_conn.sendall(b'Hello there!\n')
 
     except Exception as e:
         print(f"Error handling peer request: {e}")
@@ -76,7 +76,7 @@ def run_file_sharing_service(port=65433, shared_dir='./'):
     server.close()
 
 def announce_file_to_server(sock, local_path, shared_name):
-    """Tell the central server about a file we want to share, including extension."""
+    """Tell the central server about a file we want to share."""
     if not os.path.exists(local_path):
         print(f"File not found: {local_path}")
         return

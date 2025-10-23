@@ -6,7 +6,7 @@ import socket
 import os
 import shlex
 
-# ---- Re-use the enhanced client logic ----
+# Import the client functions
 from client import (
     shutdown_event, run_file_sharing_service, register_with_server,
     announce_file_to_server, download_file_from_peer

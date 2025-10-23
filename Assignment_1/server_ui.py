@@ -4,7 +4,7 @@ import threading
 import logging
 import sys
 
-# Import the enhanced server functions
+# Import the server functions
 from server import run_server, server_console, log as server_log
 
 class ServerApp:
