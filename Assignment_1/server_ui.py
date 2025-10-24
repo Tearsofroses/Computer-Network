@@ -71,7 +71,7 @@ class ServerApp:
     def _start_server(self):
         def run():
             try:
-                self.root.after(0, lambda: self.status_var.set("Running on 127.0.0.1:65432"))
+                self.root.after(0, lambda: self.status_var.set("Running on 0.0.0.0:65432"))
                 run_server()
             except Exception as e:
                 self.root.after(0, lambda: self._log(f"Server crashed: {e}"))
