@@ -105,7 +105,7 @@ CREATE TABLE client_files (
     id SERIAL PRIMARY KEY,
     lname TEXT NOT NULL,        -- local path on peer
     fname TEXT NOT NULL,        -- shared name
-    extension TEXT,             -- file extension (without dot)
+    extension TEXT NOT NULL,             -- file extension (without dot)
     hostname TEXT NOT NULL,
     address INET NOT NULL,
     UNIQUE(address, fname, hostname)
