@@ -12,9 +12,20 @@ from client import (
     announce_file_to_server, download_file_from_peer
 )
 
-SERVER_IP = '192.168.1.11'
-SERVER_PORT = 65432
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't have to be reachable
+        s.connect(('10.254.254.254', 1))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
 
+SERVER_IP = get_local_ip()
+SERVER_PORT = 65432
 class ClientApp:
     def __init__(self, root):
         self.root = root
