@@ -90,6 +90,12 @@ PostgreSQL server running locally
 psycopg2 Python package
 
 ## Database Setup
+1. Start psql with connection details in psql shell.
+```bash
+psql "dbname=filesharing user=postgres password='13?T+4i%ewse' host=localhost port=5432"
+```
+
+2. Create the file sharing database.
 ```sql
 CREATE DATABASE filesharing;
 
