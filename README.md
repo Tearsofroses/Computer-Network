@@ -142,6 +142,10 @@ SERVER_IP = 'your.server.ip.here'
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width=40px/>
   Python `socket` & `threading` libraries
 
+- **Database**
+<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" width=40px/>
+PostgreSQL
+
 - **Version Control**  
   <img src="https://cdn1.iconfinder.com/data/icons/logotypes/32/github-256.png" width=30px/>
 
