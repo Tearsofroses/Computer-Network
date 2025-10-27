@@ -250,4 +250,9 @@ def run_server(host: str = '0.0.0.0', port: int = 65432):
         log("Server shutdown via interrupt.")
     finally:
         server_sock.close()
-        cursor
+        try:
+            cursor.close()
+            db_conn.close()
+            logging.info("Database connection closed.")
+        except Exception:
+            pass
