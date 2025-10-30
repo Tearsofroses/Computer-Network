@@ -256,3 +256,16 @@ def run_server(host: str = '0.0.0.0', port: int = 65432):
             logging.info("Database connection closed.")
         except Exception:
             pass
+
+if __name__ == "__main__":
+    # Start server in a separate thread
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+
+    # Start the server command shell in the main thread
+    server_console()
+
+    # Signal the server to shutdown
+    print("Server shutdown requested.")
+    
+    sys.exit(0)

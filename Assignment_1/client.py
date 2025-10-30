@@ -8,13 +8,6 @@ from pathlib import Path
 # Global flag to signal shutdown of background services
 shutdown_event = threading.Event()
 
-def safe_join(base_dir, user_path):
-    base = Path(base_dir).resolve()
-    target = (base / user_path).resolve()
-    if not str(target).startswith(str(base)):
-        raise ValueError("Access denied")
-    return str(target)
-
 def list_local_files(directory='.'):
     """Return a list of filenames in the given directory."""
     try:
@@ -30,7 +23,7 @@ def handle_peer_connection(client_conn, shared_dir):
 
         if request['action'] == 'send_file':
             local_filename = request['lname']
-            file_path = safe_join(shared_dir, local_filename)
+            file_path = os.path.abspath(local_filename)
             stream_file_to_peer(client_conn, file_path)
 
         elif request['action'] == 'request_file_list':
@@ -230,3 +223,8 @@ def main(server_ip, server_port):
         shutdown_event.set()
         server_socket.close()
         service_thread.join(timeout=2)
+
+if __name__ == "__main__":
+    SERVER_HOST = '172.28.14.115'
+    SERVER_PORT = 65432
+    main(SERVER_HOST, SERVER_PORT)
