@@ -1,6 +1,7 @@
 import logging
 import socket
 import threading
+from collections import deque
 import json
 import psycopg2
 import sys
@@ -17,7 +18,7 @@ try:
     db_conn = psycopg2.connect(
         dbname="filesharing",
         user="postgres",
-        password=r"13?T+4i%ewse",
+        password=r"ktoan1811",
         host="localhost",
         port="5432"
     )
@@ -28,7 +29,16 @@ except Exception as e:
     sys.exit(1)
 
 # Global state
+MAX_CLIENTS = 5
+
+# Maps hostname -> socket (populated when client sends 'introduce')
 active_clients: Dict[str, socket.socket] = {}  # hostname -> socket
+# FIFO queue of active connections (socket, addr) in connection order.
+connection_queue: deque[Tuple[socket.socket, Tuple[str, int]]] = deque()
+# Queue for sockets that are waiting to be accepted when a slot frees.
+# Each entry is (socket, addr, threading.Event) where the Event is used
+# to signal the per-connection worker to start handling the client.
+waiting_queue: deque[Tuple[socket.socket, Tuple[str, int], threading.Event]] = deque()
 client_lock = threading.Lock()
 
 def log(message: str):
@@ -134,8 +144,41 @@ def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str,
         if client_hostname and client_hostname in active_clients:
             with client_lock:
                 del active_clients[client_hostname]
-        client_sock.close()
+        # Remove from connection_queue if present and then promote a waiting client
+        promoted_entry: Optional[Tuple[socket.socket, Tuple[str, int], threading.Event]] = None
+        with client_lock:
+            try:
+                # connection_queue contains tuples (sock, addr)
+                for item in list(connection_queue):
+                    if item[0] is client_sock:
+                        connection_queue.remove(item)
+                        break
+            except ValueError:
+                pass
+
+            # If there is a waiting client, promote the oldest waiting one
+            if waiting_queue:
+                promoted_entry = waiting_queue.popleft()
+                # add promoted client to active connection queue (sock, addr)
+                connection_queue.append((promoted_entry[0], promoted_entry[1]))
+
+        try:
+            client_sock.close()
+        except Exception:
+            pass
+
         log(f"Connection closed: {client_addr}")
+
+        # If we promoted a waiting client, signal its event to start handling.
+        if promoted_entry:
+            promoted_sock, promoted_addr, promoted_event = promoted_entry
+            log(f"Promoting waiting client {promoted_addr} into active connections")
+            # set the event so the worker thread (already started) proceeds
+            try:
+                promoted_event.set()
+            except Exception as e:
+                logging.exception(f"Failed to set promote event for {promoted_addr}: {e}")
+
 
 def discover_peer_files(hostname: str):
     """
@@ -195,6 +238,22 @@ def ping_peer(hostname: str):
     except Exception as e:
         logging.warning(f"{hostname} ({ip_addr}) is OFFLINE — {e}")
 
+
+def _waiting_worker(client_sock: socket.socket, client_addr: Tuple[str, int], promote_event: threading.Event):
+    """Worker that waits until promoted before handling the client.
+
+    The thread owns the socket and will close it when handle_client_connection
+    returns (or on errors). This guarantees only the thread that services a
+    socket will close it.
+    """
+    try:
+        # Wait until server signals this connection can be handled
+        promote_event.wait()
+        # If the event was set, start normal handling
+        handle_client_connection(client_sock, client_addr)
+    except Exception as e:
+        logging.exception(f"Waiting worker error for {client_addr}: {e}")
+
 def server_console():
     """Interactive admin console for server management."""
     print("\nServer Admin Console")
@@ -238,12 +297,30 @@ def run_server(host: str = '0.0.0.0', port: int = 65432):
             try:
                 client_sock, client_addr = server_sock.accept()
                 log(f"New connection from {client_addr}")
-                thread = threading.Thread(
-                    target=handle_client_connection,
-                    args=(client_sock, client_addr),
+
+                # For robustness start a per-connection worker that will wait on an
+                # Event until it is promoted into active connections. This avoids
+                # races where the server would start a handler later and accidentally
+                # close or mishandle sockets.
+                promote_event = threading.Event()
+                worker_thread = threading.Thread(
+                    target=_waiting_worker,
+                    args=(client_sock, client_addr, promote_event),
                     daemon=True
                 )
-                thread.start()
+                worker_thread.start()
+
+                with client_lock:
+                    if len(connection_queue) < MAX_CLIENTS:
+                        # make active immediately
+                        connection_queue.append((client_sock, client_addr))
+                        promote_event.set()
+                        log(f"Accepted and activated connection from {client_addr}")
+                    else:
+                        # queue for later promotion
+                        waiting_queue.append((client_sock, client_addr, promote_event))
+                        log(f"Connection from {client_addr} queued (server at capacity)")
+
             except socket.error:
                 continue
     except KeyboardInterrupt:
