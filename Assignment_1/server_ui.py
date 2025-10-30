@@ -1,314 +1,135 @@
-# server_ui.py
-import sys
+import tkinter as tk
+from tkinter import ttk, messagebox
 import threading
 import logging
-from PyQt6.QtCore import Qt, QTimer, QDateTime, QPropertyAnimation, QRect, QEasingCurve
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem,
-    QTextEdit, QFrame, QSplitter, QMessageBox, QGraphicsDropShadowEffect
-)
+import sys
 
-# ----------------------------------------------------------------------
-# Backend imports
-# ----------------------------------------------------------------------
-from server import run_server, active_clients, client_lock, discover_peer_files, ping_peer
+# Import the server functions
+from server import run_server, server_console, log as server_log
 
+class ServerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("P2P File Sharer – Server")
+        self.root.geometry("680x540")
+        self.root.configure(padx=10, pady=10)
 
-# ----------------------------------------------------------------------
-# Logging → UI
-# ----------------------------------------------------------------------
-class QtLogHandler(logging.Handler):
-    def __init__(self, callback):
-        super().__init__()
-        self.callback = callback
-
-    def emit(self, record):
-        msg = self.format(record)
-        self.callback(msg)
-
-
-# ----------------------------------------------------------------------
-# Animated Button Factory
-# ----------------------------------------------------------------------
-def create_animated_button(parent, text, base_color="#03dac6", hover_color="#66fff4", press_color="#00bfa5"):
-    btn = QPushButton(text)
-    btn.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    btn.setStyleSheet(f"""
-        QPushButton {{
-            background:{base_color}; color:black; border-radius:12px;
-            padding:12px 24px; font-weight:bold; font-size:14px;
-            border: none;
-        }}
-        QPushButton:hover {{ background:{hover_color}; }}
-        QPushButton:pressed {{ background:{press_color}; }}
-    """)
-
-    glow = QGraphicsDropShadowEffect()
-    glow.setBlurRadius(0)
-    glow.setColor(QColor(3, 218, 198))  # teal
-    glow.setOffset(0, 0)
-    btn.setGraphicsEffect(glow)
-
-    glow_anim = QPropertyAnimation(glow, b"blurRadius", parent)
-    glow_anim.setDuration(200)
-    glow_anim.setStartValue(0)
-    glow_anim.setEndValue(25)
-    glow_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-
-    scale_anim = QPropertyAnimation(btn, b"geometry", parent)
-    scale_anim.setDuration(100)
-    scale_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-
-    original_rect = None
-
-    def on_enter(e):
-        nonlocal original_rect
-        if original_rect is None:
-            original_rect = btn.geometry()
-        glow_anim.setDirection(QPropertyAnimation.Direction.Forward)
-        glow_anim.start()
-        r = btn.geometry()
-        new_rect = r.adjusted(-5, -5, 5, 5)
-        scale_anim.setStartValue(r)
-        scale_anim.setEndValue(new_rect)
-        scale_anim.start()
-
-    def on_leave(e):
-        glow_anim.setDirection(QPropertyAnimation.Direction.Backward)
-        glow_anim.start()
-        if original_rect:
-            scale_anim.setStartValue(btn.geometry())
-            scale_anim.setEndValue(original_rect)
-            scale_anim.start()
-
-    btn.enterEvent = on_enter
-    btn.leaveEvent = on_leave
-    return btn
-
-
-# ----------------------------------------------------------------------
-# Main Server Window
-# ----------------------------------------------------------------------
-class ServerWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("P2P File Sharer – Server")
-        self.resize(920, 660)
-        self.setStyleSheet(self._stylesheet())
-
-        self._setup_ui()
+        self.server_thread = None
+        self._build_ui()
         self._start_server()
-        self._start_refresh_timer()
 
-    # ------------------------------------------------------------------
-    # Clean Stylesheet (Teal focus!)
-    # ------------------------------------------------------------------
-    def _stylesheet(self):
-        return """
-        QMainWindow { background:#0d0d0d; color:#e0e0e0; }
-        QLabel { color:#ffffff; font-weight:500; }
-        QLineEdit {
-            padding:12px; border-radius:12px; background:#1a1a1a;
-            border:1px solid #333; font-size:14px; color:#ffffff;
-        }
-        QLineEdit::placeholder { color:#888; }
-        QLineEdit:focus { 
-            border:1px solid #03dac6; 
-            background:#1e1e1e; 
-        }
-        QTreeWidget {
-            background:#1a1a1a; border-radius:12px; font-size:13px;
-        }
-        QTreeWidget::item { padding:10px; }
-        QTreeWidget::item:selected { background:#03dac6; color:black; }
-        QTreeWidget::item:hover { background:#252525; }
-        QTextEdit {
-            background:#1a1a1a; border-radius:12px; padding:12px;
-            font-family:'Consolas'; font-size:12px; color:#b0b0b0;
-        }
-        QStatusBar { background:#1a1a1a; color:#aaa; }
-        """
+    def _build_ui(self):
+        # ----- Status -----
+        self.status_var = tk.StringVar(value="Starting…")
+        ttk.Label(self.root, textvariable=self.status_var, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=4)
 
-    # ------------------------------------------------------------------
-    # UI Setup
-    # ------------------------------------------------------------------
-    def _setup_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 20, 20)
+        # ----- Active clients -----
+        client_frame = ttk.LabelFrame(self.root, text="Connected Clients")
+        client_frame.pack(fill="both", expand=True, pady=8)
 
-        # Header
-        hdr = QHBoxLayout()
-        title = QLabel("P2P File Sharing Server")
-        title.setStyleSheet("font-size:26px; font-weight:bold;")
-        self.status_lbl = QLabel("Running")
-        self.status_lbl.setStyleSheet("color:#4caf50; font-size:14px;")
-        hdr.addWidget(title)
-        hdr.addStretch()
-        hdr.addWidget(self.status_lbl)
-        layout.addLayout(hdr)
+        self.client_tree = ttk.Treeview(client_frame, columns=("Hostname", "IP"), show="headings", height=8)
+        self.client_tree.heading("Hostname", text="Hostname")
+        self.client_tree.heading("IP", text="IP")
+        self.client_tree.column("Hostname", width=200)
+        self.client_tree.column("IP", width=150, anchor="center")
+        self.client_tree.pack(fill="both", expand=True, padx=4, pady=4)
 
-        # Splitter
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        layout.addWidget(splitter)
+        # ----- Admin commands -----
+        cmd_frame = ttk.LabelFrame(self.root, text="Admin Commands")
+        cmd_frame.pack(fill="x", pady=8)
 
-        # Left: Clients
-        left = QFrame()
-        left.setStyleSheet("background:#1a1a1a; border-radius:16px; padding:16px;")
-        left_lay = QVBoxLayout(left)
-        left_lay.addWidget(QLabel("Connected Clients"))
-        self.client_tree = QTreeWidget()
-        self.client_tree.setHeaderLabels(["Hostname", "IP", "Status"])
-        self.client_tree.setColumnWidth(0, 200)
-        left_lay.addWidget(self.client_tree)
-        splitter.addWidget(left)
+        ttk.Label(cmd_frame, text="Hostname:").grid(row=0, column=0, padx=4, pady=4, sticky="e")
+        self.cmd_host_var = tk.StringVar()
+        ttk.Entry(cmd_frame, textvariable=self.cmd_host_var, width=30).grid(row=0, column=1, padx=4, pady=4)
 
-        # Right: Admin + Log
-        right = QFrame()
-        right_lay = QVBoxLayout(right)
+        ttk.Button(cmd_frame, text="Discover Files", command=self._discover).grid(row=0, column=2, padx=4)
+        ttk.Button(cmd_frame, text="Ping", command=self._ping).grid(row=0, column=3, padx=4)
 
-        # Admin Panel
-        admin = QFrame()
-        admin.setStyleSheet("background:#1f1f1f; border-radius:12px; padding:12px;")
-        admin_lay = QHBoxLayout(admin)
+        # ----- Log console -----
+        log_frame = ttk.LabelFrame(self.root, text="Server Log")
+        log_frame.pack(fill="both", expand=True, pady=8)
+        self.log_text = tk.Text(log_frame, height=10, state="disabled", wrap="word")
+        self.log_text.pack(fill="both", expand=True, padx=4, pady=4)
 
-        self.host_input = QLineEdit()
-        self.host_input.setPlaceholderText("Enter hostname…")
-        self._add_focus_glow(self.host_input, QColor(3, 218, 198))  # TEAL GLOW
-
-        disc_btn = create_animated_button(self, "Discover Files", "#03dac6", "#66fff4", "#00bfa5")
-        ping_btn = create_animated_button(self, "Ping",  "#03dac6", "#66fff4", "#00bfa5")
-
-        disc_btn.clicked.connect(self._discover)
-        ping_btn.clicked.connect(self._ping)
-
-        admin_lay.addWidget(self.host_input)
-        admin_lay.addWidget(disc_btn)
-        admin_lay.addWidget(ping_btn)
-        right_lay.addWidget(admin)
-
-        # Log
-        log_box = QFrame()
-        log_box.setStyleSheet("background:#1a1a1a; border-radius:12px;")
-        log_lay = QVBoxLayout(log_box)
-        log_lay.addWidget(QLabel("Server Log"))
-        self.log_view = QTextEdit()
-        self.log_view.setReadOnly(True)
-        log_lay.addWidget(self.log_view)
-        right_lay.addWidget(log_box)
-
-        splitter.addWidget(right)
-        splitter.setSizes([420, 500])
-
-        # Status bar
-        self.statusBar().showMessage("Server started")
-
-        # Logging
-        handler = QtLogHandler(self._log)
+        # Redirect logging
+        class TextHandler(logging.Handler):
+            def emit(self, record):
+                msg = self.format(record)
+                self._append(msg)
+        handler = TextHandler()
         handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        handler._append = lambda m: self.root.after(0, lambda: self._log(m))
         logging.getLogger().addHandler(handler)
-        logging.getLogger().setLevel(logging.INFO)
 
-    # ------------------------------------------------------------------
-    # Focus glow for QLineEdit (TEAL)
-    # ------------------------------------------------------------------
-    def _add_focus_glow(self, widget, color):
-        effect = QGraphicsDropShadowEffect()
-        effect.setBlurRadius(0)
-        effect.setColor(color)
-        effect.setOffset(0, 0)
-        widget.setGraphicsEffect(effect)
-
-        anim = QPropertyAnimation(effect, b"blurRadius", self)
-        anim.setDuration(200)
-        anim.setStartValue(0)
-        anim.setEndValue(20)
-        anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-
-        def focus_in(e):
-            QLineEdit.focusInEvent(widget, e)
-            anim.setDirection(QPropertyAnimation.Direction.Forward)
-            anim.start()
-
-        def focus_out(e):
-            QLineEdit.focusOutEvent(widget, e)
-            anim.setDirection(QPropertyAnimation.Direction.Backward)
-            anim.start()
-
-        widget.focusInEvent = focus_in
-        widget.focusOutEvent = focus_out
-
-    # ------------------------------------------------------------------
-    # Logging
-    # ------------------------------------------------------------------
     def _log(self, msg):
-        ts = QDateTime.currentDateTime().toString("hh:mm:ss")
-        self.log_view.append(f"[{ts}] {msg}")
-        self.statusBar().showMessage(msg.split("\n")[-1][:120])
+        self.log_text.configure(state="normal")
+        self.log_text.insert("end", msg + "\n")
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
 
-    # ------------------------------------------------------------------
-    # Server & Refresh
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------- Server start
     def _start_server(self):
-        threading.Thread(target=run_server, daemon=True).start()
-
-    def _start_refresh_timer(self):
-        timer = QTimer(self)
-        timer.timeout.connect(self._refresh_clients)
-        timer.start(2500)
-        self._refresh_clients()
-
-    def _refresh_clients(self):
-        with client_lock:
-            current = dict(active_clients)
-        self.client_tree.clear()
-        for hn, sock in current.items():
+        def run():
             try:
-                ip = sock.getpeername()[0]
-                item = QTreeWidgetItem([hn, ip, "Online"])
-                item.setForeground(2, QColor("#4caf50"))
-                self.client_tree.addTopLevelItem(item)
-            except:
-                pass
+                self.root.after(0, lambda: self.status_var.set("Running on 0.0.0.0:65432"))
+                run_server()
+            except Exception as e:
+                self.root.after(0, lambda: self._log(f"Server crashed: {e}"))
+        self.server_thread = threading.Thread(target=run, daemon=True)
+        self.server_thread.start()
 
-    # ------------------------------------------------------------------
-    # Admin Actions
-    # ------------------------------------------------------------------
+        # Periodic refresh of client list
+        def refresh():
+            from server import active_clients, client_lock
+            with client_lock:
+                current = set(active_clients.keys())
+            for item in self.client_tree.get_children():
+                self.client_tree.delete(item)
+            for hn in current:
+                ip = active_clients[hn].getpeername()[0]
+                self.client_tree.insert("", "end", values=(hn, ip))
+            self.root.after(3000, refresh)
+        self.root.after(3000, refresh)
+
+    # --------------------------------------------------------------- Admin actions
     def _discover(self):
-        hn = self.host_input.text().strip()
+        hn = self.cmd_host_var.get().strip()
         if not hn:
-            QMessageBox.warning(self, "Empty", "Enter a hostname.")
+            messagebox.showwarning("Empty", "Enter a hostname.")
             return
-        threading.Thread(target=discover_peer_files, args=(hn,), daemon=True).start()
+        threading.Thread(target=self._do_discover, args=(hn,), daemon=True).start()
+
+    def _do_discover(self, hostname):
+        from server import discover_peer_files
+        try:
+            discover_peer_files(hostname)  # prints to console → captured by log handler
+        except Exception as e:
+            self.root.after(0, lambda: self._log(f"Discover error: {e}"))
 
     def _ping(self):
-        hn = self.host_input.text().strip()
+        hn = self.cmd_host_var.get().strip()
         if not hn:
-            QMessageBox.warning(self, "Empty", "Enter a hostname.")
+            messagebox.showwarning("Empty", "Enter a hostname.")
             return
-        threading.Thread(target=ping_peer, args=(hn,), daemon=True).start()
+        threading.Thread(target=self._do_ping, args=(hn,), daemon=True).start()
 
-    # ------------------------------------------------------------------
-    # Shutdown
-    # ------------------------------------------------------------------
-    def closeEvent(self, event):
+    def _do_ping(self, hostname):
+        from server import ping_peer
+        try:
+            ping_peer(hostname)
+        except Exception as e:
+            self.root.after(0, lambda: self._log(f"Ping error: {e}"))
+
+    # --------------------------------------------------------------- Shutdown
+    def close(self):
         self._log("Shutting down server…")
         import os, signal
-        os.kill(os.getpid(), signal.SIGINT)
-        event.accept()
+        os.kill(os.getpid(), signal.SIGINT)  # triggers KeyboardInterrupt in server thread
+        self.root.after(1000, self.root.destroy)
 
 
-# ----------------------------------------------------------------------
-# Entry Point
-# ----------------------------------------------------------------------
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    win = ServerWindow()
-    win.show()
-    sys.exit(app.exec())
+    root = tk.Tk()
+    app = ServerApp(root)
+    root.protocol("WM_DELETE_WINDOW", app.close)
+    root.mainloop()
