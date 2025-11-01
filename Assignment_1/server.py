@@ -18,7 +18,7 @@ try:
     db_conn = psycopg2.connect(
         dbname="filesharing",
         user="postgres",
-        password=r"ktoan1811",
+        password=r"13?T+4i%ewse",
         host="localhost",
         port="5432"
     )

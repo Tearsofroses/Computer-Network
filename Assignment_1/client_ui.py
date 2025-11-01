@@ -280,7 +280,7 @@ class ClientWindow(QMainWindow):
 
         def connect():
             try:
-                self.server_sock = register_with_server("172.28.14.116", 65432) # replace with your server IP
+                self.server_sock = register_with_server("192.168.1.9", 65432) # replace with your server IP
                 self.signals.connected.emit(True)
                 self.signals.log.emit("Connected to server")
             except Exception as e:
