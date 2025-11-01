@@ -96,13 +96,38 @@ def create_animated_button(parent, text, base_color="#03dac6", hover_color="#66f
 
 
 # ----------------------------------------------------------------------
+# Settings handling (IP + port)
+# ----------------------------------------------------------------------
+SETTINGS_FILE = Path(__file__).with_name("client_settings.json")
+DEFAULT_SERVER_IP = "127.0.0.1"
+DEFAULT_SERVER_PORT = 65432
+
+def load_settings():
+    if SETTINGS_FILE.is_file():
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("server_ip", DEFAULT_SERVER_IP), int(data.get("server_port", DEFAULT_SERVER_PORT))
+        except Exception:
+            pass
+    return DEFAULT_SERVER_IP, DEFAULT_SERVER_PORT
+
+def save_settings(ip: str, port: int):
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump({"server_ip": ip, "server_port": port}, f, indent=2)
+    except Exception:
+        pass
+
+
+# ----------------------------------------------------------------------
 # Main Client Window
 # ----------------------------------------------------------------------
 class ClientWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("P2P File Sharer – Client")
-        self.resize(820, 640)
+        self.resize(820, 680)                     # a bit taller for the new row
         self.setStyleSheet(self._stylesheet())
         self.signals = WorkerSignals()
 
@@ -110,6 +135,7 @@ class ClientWindow(QMainWindow):
         self.service_thread = None
         self.peer_data = []
 
+        self.server_ip, self.server_port = load_settings()
         self._setup_ui()
         self._start_background()
 
@@ -118,7 +144,7 @@ class ClientWindow(QMainWindow):
         self.signals.connected.connect(self._update_status)
 
     # ------------------------------------------------------------------
-    # Clean Stylesheet (Same as Server)
+    # Stylesheet
     # ------------------------------------------------------------------
     def _stylesheet(self):
         return """
@@ -154,18 +180,43 @@ class ClientWindow(QMainWindow):
         main.setSpacing(16)
         main.setContentsMargins(20, 20, 20, 20)
 
-        # Header
+        # ---------- Header ----------
         hdr = QHBoxLayout()
         title = QLabel("P2P File Sharer – Client")
         title.setStyleSheet("font-size:24px; font-weight:bold;")
-        self.status_lbl = QLabel("Connecting…")
-        self.status_lbl.setStyleSheet("font-size:12px; color:#888;")
+        self.status_lbl = QLabel("Disconnected")
+        self.status_lbl.setStyleSheet("font-size:12px; color:#f44336;")
         hdr.addWidget(title)
         hdr.addStretch()
         hdr.addWidget(self.status_lbl)
         main.addLayout(hdr)
 
-        # Publish
+        # ---------- Server Connection ----------
+        conn_box = QFrame()
+        conn_box.setStyleSheet("background:#1a1a1a; border-radius:16px; padding:16px;")
+        conn_lay = QHBoxLayout(conn_box)
+        conn_lay.addWidget(QLabel("Server:"))
+
+        self.ip_input = QLineEdit()
+        self.ip_input.setPlaceholderText("Server IP (e.g. 192.168.1.5)")
+        self.ip_input.setText(self.server_ip)
+        self._add_focus_glow(self.ip_input, QColor(3, 218, 198))
+
+        self.port_input = QLineEdit()
+        self.port_input.setFixedWidth(70)
+        self.port_input.setPlaceholderText("Port")
+        self.port_input.setText(str(self.server_port))
+        self._add_focus_glow(self.port_input, QColor(3, 218, 198))
+
+        self.connect_btn = create_animated_button(self, "Connect", "#03dac6", "#66fff4", "#00bfa5")
+        self.connect_btn.clicked.connect(self._connect_to_server)
+
+        conn_lay.addWidget(self.ip_input)
+        conn_lay.addWidget(self.port_input)
+        conn_lay.addWidget(self.connect_btn)
+        main.addWidget(conn_box)
+
+        # ---------- Publish ----------
         pub_box = QFrame()
         pub_box.setStyleSheet("background:#1a1a1a; border-radius:16px; padding:16px;")
         pub_lay = QVBoxLayout(pub_box)
@@ -192,7 +243,7 @@ class ClientWindow(QMainWindow):
         pub_lay.addLayout(row2)
         main.addWidget(pub_box)
 
-        # Search & Download
+        # ---------- Search & Download ----------
         search_box = QFrame()
         search_box.setStyleSheet("background:#1a1a1a; border-radius:16px; padding:16px;")
         search_lay = QVBoxLayout(search_box)
@@ -218,7 +269,7 @@ class ClientWindow(QMainWindow):
         search_lay.addWidget(dl_btn)
         main.addWidget(search_box)
 
-        # Log
+        # ---------- Log ----------
         log_box = QFrame()
         log_box.setStyleSheet("background:#1a1a1a; border-radius:16px;")
         log_lay = QVBoxLayout(log_box)
@@ -272,25 +323,53 @@ class ClientWindow(QMainWindow):
         self.status_lbl.setStyleSheet("color:#4caf50;" if ok else "color:#f44336;")
 
     # ------------------------------------------------------------------
-    # Background (Auto-connect to localhost)
+    # Background (local file-sharing service)
     # ------------------------------------------------------------------
     def _start_background(self):
         self.service_thread = threading.Thread(target=run_file_sharing_service, daemon=True)
         self.service_thread.start()
 
-        def connect():
+    # ------------------------------------------------------------------
+    # Connect to Server (user-triggered)
+    # ------------------------------------------------------------------
+    def _connect_to_server(self):
+        ip = self.ip_input.text().strip()
+        try:
+            port = int(self.port_input.text().strip())
+            if not (0 < port <= 65535):
+                raise ValueError
+        except Exception:
+            QMessageBox.warning(self, "Invalid", "Enter a valid port (1-65535).")
+            return
+
+        if not ip:
+            QMessageBox.warning(self, "Empty", "Enter a server IP.")
+            return
+
+        # Save for next launch
+        save_settings(ip, port)
+
+        # Disable UI while connecting
+        self.connect_btn.setEnabled(False)
+        self.connect_btn.setText("Connecting…")
+        self.signals.connected.emit(False)
+
+        def worker():
             try:
-                self.server_sock = register_with_server("192.168.1.9", 65432) # replace with your server IP
+                self.server_sock = register_with_server(ip, port)
                 self.signals.connected.emit(True)
-                self.signals.log.emit("Connected to server")
+                self.signals.log.emit(f"Connected to server {ip}:{port}")
             except Exception as e:
                 self.signals.connected.emit(False)
                 self.signals.log.emit(f"Connection failed: {e}")
+            finally:
+                self.connect_btn.setEnabled(True)
+                self.connect_btn.setText("Connect")
 
-        threading.Thread(target=connect, daemon=True).start()
+        threading.Thread(target=worker, daemon=True).start()
 
     # ------------------------------------------------------------------
-    # Actions
+    # Publish / Browse / Search / Download (unchanged logic)
     # ------------------------------------------------------------------
     def _browse_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Select file to share")
@@ -300,6 +379,9 @@ class ClientWindow(QMainWindow):
             self.shared_name.setText(name)
 
     def _publish(self):
+        if not self.server_sock:
+            QMessageBox.warning(self, "Not connected", "Connect to the server first.")
+            return
         local = self.local_path.text().strip()
         shared = self.shared_name.text().strip()
         if not local or not shared:
@@ -319,6 +401,9 @@ class ClientWindow(QMainWindow):
         threading.Thread(target=worker, daemon=True).start()
 
     def _search(self):
+        if not self.server_sock:
+            QMessageBox.warning(self, "Not connected", "Connect to the server first.")
+            return
         fname = self.search_input.text().strip()
         if not fname:
             QMessageBox.warning(self, "Empty", "Enter a file name.")
@@ -352,6 +437,9 @@ class ClientWindow(QMainWindow):
             self.peer_tree.addTopLevelItem(item)
 
     def _download_selected(self):
+        if not self.server_sock:
+            QMessageBox.warning(self, "Not connected", "Connect to the server first.")
+            return
         item = self.peer_tree.currentItem()
         if not item:
             QMessageBox.information(self, "Select", "Choose a peer first.")
