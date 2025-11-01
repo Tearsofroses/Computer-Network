@@ -92,15 +92,21 @@ psycopg2 Python package
 ## Database Setup
 1. Start psql with connection details in psql shell.
 ```bash
-psql "dbname=filesharing user=postgres password='13?T+4i%ewse' host=localhost port=5432"
+psql -U postgres -h localhost -p 5432
 ```
+
+You’ll be prompted for the password: Enter your password.
 
 2. Create the file sharing database.
 ```sql
 CREATE DATABASE filesharing;
+```
 
+```sql
 \c filesharing
+```
 
+```sql
 CREATE TABLE client_files (
     id SERIAL PRIMARY KEY,
     lname TEXT NOT NULL,        -- local path on peer
@@ -113,7 +119,27 @@ CREATE TABLE client_files (
 ```
 
 ## How to run 
-1. Start the server
+1. Set up a virtual environment and activate the Virtual Environment
+```bash
+python -m venv venv
+```
+
+On Windows
+```cmd
+venv\Scripts\activate.bat
+```
+
+On macOS / Linux:
+```bash
+source venv/bin/activate
+```
+
+Install Dependencies from requirements.txt
+```bash
+pip install -r requirements.txt
+```
+
+2. Start the server
 ```python
 python server_ui.py
 ```
@@ -122,7 +148,7 @@ python server_ui.py
 - Logs all activity
 - Use Admin Commands to Discover Files or Ping a host
 
-2. Start Clients (on same network)
+3. Start Clients (on same network)
 ```python
 python client_ui.py
 ```
