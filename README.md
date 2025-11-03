@@ -89,6 +89,13 @@ Python 3.8+
 PostgreSQL server running locally
 psycopg2 Python package
 
+## Clone & Setup Project
+1. Clone the Repository
+```bash
+git clone https://github.com/Tearsofroses/Computer-Network.git
+cd Computer-Networks/Assignment_1
+```
+
 ## Database Setup
 1. Start psql with connection details in psql shell.
 ```bash
