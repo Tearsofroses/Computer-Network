@@ -38,11 +38,20 @@ Each project explores different aspects of **TCP/IP-based communication**, **soc
 ```markdown
 Computer-Networks/
 ├── Assignment_1/
+│   ├── test/
+│   ├── ASS1_T1.pdf
 │   ├── client.py
 │   ├── client_ui.py
 │   ├── server.py
 │   ├── server_ui.py
+│   ├── client.ico
+│   ├── server.ico
+│   ├── client.spec
+│   ├── server.spec
+│   ├── requirements.txt
 ├── Assignment_2/
+│   ├── ASS2_T1.pdf
+│   ├── ASS2_T1.pkt
 ├── .gitignore
 └── README.md   ← (this file)
 ```
