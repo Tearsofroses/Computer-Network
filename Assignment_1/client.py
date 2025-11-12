@@ -18,7 +18,8 @@ def list_local_files(directory='.'):
 def handle_peer_connection(client_conn, shared_dir):
     """Handle incoming peer requests: file list, file transfer, or ping."""
     try:
-        raw_data = client_conn.recv(4096).decode('utf-8').strip()
+        client_file = client_conn.makefile('r', encoding='utf-8')
+        raw_data = client_file.readline().strip()
         request = json.loads(raw_data)
 
         if request['action'] == 'send_file':

@@ -68,8 +68,9 @@ def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str,
     client_hostname: Optional[str] = None
 
     try:
+        client_file  = client_sock.makefile('r', encoding='utf-8')
         while True:
-            raw_data = client_sock.recv(4096).decode('utf-8').strip()
+            raw_data = client_file.readline().strip()
             if not raw_data:
                 break
 
@@ -141,6 +142,9 @@ def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str,
         logging.exception(f"Error handling client {client_addr}: {e}")
     finally:
         # Cleanup
+        if client_file:
+            client_file.close()
+            
         if client_hostname and client_hostname in active_clients:
             with client_lock:
                 del active_clients[client_hostname]
