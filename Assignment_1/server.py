@@ -242,23 +242,25 @@ def discover_peer_files(hostname: str):
     except Exception as e:
         logging.error(f"Failed to discover files for {hostname}: {e}")
 
-def ping_peer(hostname: str):
-    """Send a ping to verify if a peer is online."""
-    with db_cursor() as cursor:
-        cursor.execute(
-            "SELECT DISTINCT address FROM client_files WHERE hostname = %s LIMIT 1",
-            (hostname,)
-        )
-        result = cursor.fetchone()
+def check_peer_online(hostname: str, timeout: float = 3.0) -> Tuple[bool, Optional[str], Optional[str]]:
+    """Return (is_online, ip_address, detail_message) for a peer."""
+    try:
+        with db_cursor() as cursor:
+            cursor.execute(
+                "SELECT DISTINCT address FROM client_files WHERE hostname = %s LIMIT 1",
+                (hostname,)
+            )
+            result = cursor.fetchone()
+    except Exception as e:
+        return False, None, f"Database lookup failed: {e}"
 
     if not result:
-        logging.warning(f"No record found for host: {hostname}")
-        return
+        return False, None, "No record found for host"
 
     ip_addr = result[0]
     try:
         ping_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        ping_sock.settimeout(3.0)
+        ping_sock.settimeout(timeout)
         ping_sock.connect((ip_addr, 65433))
 
         ping_sock.sendall(json.dumps({'action': 'ping'}).encode('utf-8') + b'\n')
@@ -266,11 +268,24 @@ def ping_peer(hostname: str):
         ping_sock.close()
 
         if response == "Hello there!":
-            logging.info(f"{hostname} ({ip_addr}) is ONLINE")
-        else:
-            logging.warning(f"{hostname} responded but not recognized: {response}")
+            return True, ip_addr, None
+        return False, ip_addr, f"Unexpected response: {response}"
     except Exception as e:
-        logging.warning(f"{hostname} ({ip_addr}) is OFFLINE — {e}")
+        return False, ip_addr, str(e)
+
+
+def ping_peer(hostname: str):
+    """Send a ping to verify if a peer is online."""
+    online, ip_addr, detail = check_peer_online(hostname)
+
+    if ip_addr is None:
+        logging.warning(detail or f"No record found for host: {hostname}")
+        return
+
+    if online:
+        logging.info(f"{hostname} ({ip_addr}) is ONLINE")
+    else:
+        logging.warning(f"{hostname} ({ip_addr}) is OFFLINE — {detail}")
 
 
 def _waiting_worker(client_sock: socket.socket, client_addr: Tuple[str, int], promote_event: threading.Event):

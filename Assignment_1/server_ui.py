@@ -2,6 +2,7 @@
 import sys
 import threading
 import logging
+import time
 from PyQt6.QtCore import Qt, QTimer, QDateTime, QPropertyAnimation, QRect, QEasingCurve
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
@@ -13,7 +14,14 @@ from PyQt6.QtWidgets import (
 # ----------------------------------------------------------------------
 # Backend imports
 # ----------------------------------------------------------------------
-from server import run_server, active_clients, client_lock, discover_peer_files, ping_peer
+from server import (
+    run_server,
+    active_clients,
+    client_lock,
+    discover_peer_files,
+    ping_peer,
+    check_peer_online,
+)
 
 
 # ----------------------------------------------------------------------
@@ -98,6 +106,12 @@ class ServerWindow(QMainWindow):
         self.setWindowTitle("P2P File Sharer – Server")
         self.resize(920, 660)
         self.setStyleSheet(self._stylesheet())
+
+        self._status_cache = {}
+        self._status_lock = threading.Lock()
+        self._status_thread = None
+        self._status_check_interval = 5.0  # seconds
+        self._last_status_check = 0.0
 
         self._setup_ui()
         self._start_server()
@@ -258,23 +272,76 @@ class ServerWindow(QMainWindow):
         threading.Thread(target=run_server, daemon=True).start()
 
     def _start_refresh_timer(self):
-        timer = QTimer(self)
-        timer.timeout.connect(self._refresh_clients)
-        timer.start(2500)
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self._on_refresh_tick)
+        self._refresh_timer.start(2500)
+        self._on_refresh_tick()
+
+    def _on_refresh_tick(self):
         self._refresh_clients()
+        self._ensure_status_worker()
+
+    def _ensure_status_worker(self):
+        now = time.monotonic()
+        active_thread = self._status_thread and self._status_thread.is_alive()
+        if active_thread or now - self._last_status_check < self._status_check_interval:
+            return
+
+        self._status_thread = threading.Thread(target=self._update_statuses, daemon=True)
+        self._status_thread.start()
+
+    def _update_statuses(self):
+        try:
+            with client_lock:
+                hostnames = list(active_clients.keys())
+
+            new_cache = {}
+            for hostname in hostnames:
+                online, ip_addr, detail = check_peer_online(hostname)
+                new_cache[hostname] = {
+                    "online": online,
+                    "detail": detail or "",
+                    "ip": ip_addr or "",
+                }
+
+            with self._status_lock:
+                self._status_cache = new_cache
+
+            self._last_status_check = time.monotonic()
+        finally:
+            self._status_thread = None
 
     def _refresh_clients(self):
         with client_lock:
             current = dict(active_clients)
+        with self._status_lock:
+            status_snapshot = dict(self._status_cache)
         self.client_tree.clear()
         for hn, sock in current.items():
             try:
                 ip = sock.getpeername()[0]
-                item = QTreeWidgetItem([hn, ip, "Online"])
-                item.setForeground(2, QColor("#4caf50"))
-                self.client_tree.addTopLevelItem(item)
-            except:
-                pass
+            except OSError:
+                ip = "?"
+
+            status_info = status_snapshot.get(hn)
+            if status_info is None:
+                status_text = "Checking…"
+                color = QColor("#ffa000")
+                detail = ""
+            elif status_info["online"]:
+                status_text = "Online"
+                color = QColor("#4caf50")
+                detail = ""
+            else:
+                status_text = "Offline"
+                color = QColor("#f44336")
+                detail = status_info["detail"]
+
+            item = QTreeWidgetItem([hn, ip, status_text])
+            item.setForeground(2, color)
+            if detail:
+                item.setToolTip(2, detail)
+            self.client_tree.addTopLevelItem(item)
 
     # ------------------------------------------------------------------
     # Admin Actions
