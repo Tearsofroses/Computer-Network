@@ -4,7 +4,9 @@ import threading
 from collections import deque
 import json
 import psycopg2
+from psycopg2.pool import ThreadedConnectionPool
 import sys
+from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple
 
 # Configure logging
@@ -14,22 +16,23 @@ logging.basicConfig(
 )
 
 # Database connection
+MAX_CLIENTS = 5
 try:
-    db_conn = psycopg2.connect(
+    db_pool = ThreadedConnectionPool(
+        minconn=1,
+        maxconn=MAX_CLIENTS + 2,
         dbname="filesharing",
         user="postgres",
-        password=r"13?T+4i%ewse",
+        password=r"ktoan1811",
         host="localhost",
         port="5432"
     )
-    cursor = db_conn.cursor()
-    logging.info("Connected to PostgreSQL database.")
+    logging.info("Initialized PostgreSQL connection pool.")
 except Exception as e:
     logging.error(f"Failed to connect to database: {e}")
     sys.exit(1)
 
 # Global state
-MAX_CLIENTS = 5
 
 # Maps hostname -> socket (populated when client sends 'introduce')
 active_clients: Dict[str, socket.socket] = {}  # hostname -> socket
@@ -41,6 +44,26 @@ connection_queue: deque[Tuple[socket.socket, Tuple[str, int]]] = deque()
 waiting_queue: deque[Tuple[socket.socket, Tuple[str, int], threading.Event]] = deque()
 client_lock = threading.Lock()
 
+@contextmanager
+def db_cursor():
+    """Yield a fresh cursor from the pool and handle commit/rollback."""
+    conn = None
+    cursor = None
+    try:
+        conn = db_pool.getconn()
+        cursor = conn.cursor()
+        yield cursor
+        conn.commit()
+    except Exception:
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db_pool.putconn(conn)
+
 def log(message: str):
     """Thread-safe logging shortcut."""
     logging.info(message)
@@ -48,20 +71,19 @@ def log(message: str):
 def register_or_update_file(lname: str, fname: str, extension: str, hostname: str, ip_addr: str):
     """Insert or update file metadata in the database, including extension."""
     try:
-        cursor.execute(
-            """
-            INSERT INTO client_files (lname, fname, extension, hostname, address)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (address, fname, hostname) 
-            DO UPDATE SET lname = EXCLUDED.lname, extension = EXCLUDED.extension
-            """,
-            (lname, fname, extension, hostname, ip_addr)
-        )
-        db_conn.commit()
+        with db_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO client_files (lname, fname, extension, hostname, address)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (address, fname, hostname) 
+                DO UPDATE SET lname = EXCLUDED.lname, extension = EXCLUDED.extension
+                """,
+                (lname, fname, extension, hostname, ip_addr)
+            )
         log(f"Registered file '{fname}' (ext: {extension}) from {hostname}@{ip_addr}")
     except Exception as e:
         logging.error(f"Database error during file registration: {e}")
-        db_conn.rollback()
 
 def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str, int]):
     """Process incoming commands from a connected peer."""
@@ -75,7 +97,7 @@ def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str,
                 break
 
             try:
-                command = json.loads(raw_data)
+                command = json.loads(raw_data) # Dùng json.loads chuyển chuỗi JSON raw_data thành dict Python command.
             except json.JSONDecodeError:
                 log(f"Invalid JSON from {client_addr}: {raw_data}")
                 continue
@@ -87,8 +109,8 @@ def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str,
                 client_hostname = command.get('hostname')
                 if client_hostname:
                     with client_lock:
-                        active_clients[client_hostname] = client_sock
-                    log(f"Client introduced: {client_hostname} ({client_addr[0]})")
+                        active_clients[client_hostname] = client_sock # Lưu trữ socket của client theo hostname.
+                    log(f"Client introduced: {client_hostname} ({client_addr[0]})") 
                 else:
                     log(f"Invalid introduce from {client_addr}: missing hostname")
 
@@ -98,8 +120,8 @@ def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str,
                 fname = command.get('fname')
                 lname = command.get('lname')
                 extension = command.get('extension', '')
-                if all([hostname, fname, lname]):
-                    register_or_update_file(lname, fname, extension, hostname, client_addr[0])
+                if all([hostname, fname, lname]): # Kiểm tra tất cả các trường cần thiết có mặt.
+                    register_or_update_file(lname, fname, extension, hostname, client_addr[0]) # Gọi hàm đăng ký hoặc cập nhật file.
                     client_sock.sendall(b"File registered successfully.\n")
                 else:
                     client_sock.sendall(b"Error: Missing publish fields.\n")
@@ -111,15 +133,21 @@ def handle_client_connection(client_sock: socket.socket, client_addr: Tuple[str,
                     client_sock.sendall(json.dumps({'error': 'Missing fname'}).encode() + b'\n')
                     continue
 
-                cursor.execute(
-                    """
-                    SELECT DISTINCT ON (address, hostname) address, hostname, lname, extension
-                    FROM client_files
-                    WHERE fname = %s
-                    """,
-                    (fname,)
-                )
-                results = cursor.fetchall()
+                try:
+                    with db_cursor() as cursor:
+                        cursor.execute(
+                            """
+                            SELECT DISTINCT ON (address, hostname) address, hostname, lname, extension
+                            FROM client_files
+                            WHERE fname = %s
+                            """,
+                            (fname,)
+                        )
+                        results = cursor.fetchall() # Lấy tất cả các bản ghi phù hợp với fname từ cơ sở dữ liệu.
+                except Exception as e:
+                    logging.error(f"Database error during fetch for '{fname}': {e}")
+                    client_sock.sendall(json.dumps({'error': 'Server database failure'}).encode('utf-8') + b'\n')
+                    continue
 
                 if results:
                     peers = [
@@ -190,16 +218,17 @@ def discover_peer_files(hostname: str):
     This reads from the PostgreSQL database, not the peer's local folder.
     """
     try:
-        cursor.execute(
-            """
-            SELECT fname, extension
-            FROM client_files
-            WHERE hostname = %s
-            ORDER BY fname
-            """,
-            (hostname,)
-        )
-        results = cursor.fetchall()
+        with db_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT fname, extension
+                FROM client_files
+                WHERE hostname = %s
+                ORDER BY fname
+                """,
+                (hostname,)
+            )
+            results = cursor.fetchall()
 
         if not results:
             logging.warning(f"No published files found for host: {hostname}")
@@ -215,11 +244,12 @@ def discover_peer_files(hostname: str):
 
 def ping_peer(hostname: str):
     """Send a ping to verify if a peer is online."""
-    cursor.execute(
-        "SELECT DISTINCT address FROM client_files WHERE hostname = %s LIMIT 1",
-        (hostname,)
-    )
-    result = cursor.fetchone()
+    with db_cursor() as cursor:
+        cursor.execute(
+            "SELECT DISTINCT address FROM client_files WHERE hostname = %s LIMIT 1",
+            (hostname,)
+        )
+        result = cursor.fetchone()
 
     if not result:
         logging.warning(f"No record found for host: {hostname}")
@@ -332,9 +362,8 @@ def run_server(host: str = '0.0.0.0', port: int = 65432):
     finally:
         server_sock.close()
         try:
-            cursor.close()
-            db_conn.close()
-            logging.info("Database connection closed.")
+            db_pool.closeall()
+            logging.info("Database connections closed.")
         except Exception:
             pass
 
